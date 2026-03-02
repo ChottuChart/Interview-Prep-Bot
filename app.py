@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from groq import Groq
 import json
 import re
@@ -232,6 +233,68 @@ div.stTextInput > div > div > input {
     border: 1.5px solid #e2e8f0 !important;
 }
 div.stSpinner { text-align: center; }
+
+/* ── VOICE BUTTON ── */
+.voice-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+}
+.voice-btn {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 4px 14px rgba(99,102,241,.35);
+    transition: transform .2s, box-shadow .2s;
+    flex-shrink: 0;
+}
+.voice-btn:hover { transform: scale(1.08); box-shadow: 0 8px 20px rgba(99,102,241,.45); }
+.voice-btn.listening {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    animation: voicePulse 1s ease-in-out infinite;
+    box-shadow: 0 4px 14px rgba(239,68,68,.45);
+}
+@keyframes voicePulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,.4); }
+    50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(239,68,68,0); }
+}
+.voice-status {
+    font-size: .85rem; color: #64748b; flex: 1;
+    display: flex; flex-direction: column; gap: 3px;
+}
+.voice-status .vs-title { font-weight: 600; color: #334155; font-size: .9rem; }
+.voice-status .vs-sub { font-size: .78rem; color: #94a3b8; }
+.voice-status.active .vs-title { color: #ef4444; }
+.voice-status.active .vs-sub { color: #f87171; }
+
+/* sound wave animation */
+.wave-wrap {
+    display: flex; align-items: center; gap: 3px; height: 24px;
+}
+.wave-bar {
+    width: 3px; border-radius: 3px;
+    background: #ef4444;
+    animation: waveAnim 0.8s ease-in-out infinite;
+}
+.wave-bar:nth-child(1) { height: 8px;  animation-delay: 0s; }
+.wave-bar:nth-child(2) { height: 18px; animation-delay: .1s; }
+.wave-bar:nth-child(3) { height: 12px; animation-delay: .2s; }
+.wave-bar:nth-child(4) { height: 22px; animation-delay: .3s; }
+.wave-bar:nth-child(5) { height: 10px; animation-delay: .4s; }
+.wave-bar:nth-child(6) { height: 16px; animation-delay: .15s; }
+@keyframes waveAnim {
+    0%, 100% { transform: scaleY(0.4); opacity: .6; }
+    50%       { transform: scaleY(1);   opacity: 1; }
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -326,7 +389,7 @@ Return ONLY valid JSON, no markdown:
 # ══════════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class="hero">
-  <div class="hero-badge">✨ Powered by Claude AI</div>
+  <div class="hero-badge">✨ Powered by Chottu_Chart AI</div>
   <h1>🎤 Interview Prep Bot</h1>
   <p>AI mock interviews · Real feedback · Land your dream job</p>
 </div>
@@ -439,13 +502,150 @@ elif st.session_state.stage == "interview":
     </div>
     """, unsafe_allow_html=True)
 
-    # Answer input
+
+    # ── VOICE INPUT COMPONENT ──────────────────────────────────────────
+    voice_html = """
+<div class="voice-wrap" id="voiceWrap">
+  <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" title="Click to speak">
+    🎤
+  </button>
+  <div class="voice-status" id="voiceStatus">
+    <div class="vs-title">Click mic to speak your answer</div>
+    <div class="vs-sub">Supports English, Tamil, Hindi</div>
+  </div>
+</div>
+
+<script>
+let recognition = null;
+let isListening = false;
+let finalTranscript = '';
+
+// Check browser support
+if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+  document.getElementById('voiceWrap').innerHTML =
+    '<div style="padding:10px;color:#94a3b8;font-size:.82rem">⚠️ Voice not supported in this browser. Use Chrome!</div>';
+}
+
+function toggleVoice() {
+  if (isListening) {
+    stopListening();
+  } else {
+    startListening();
+  }
+}
+
+function startListening() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRecognition();
+
+  // Language based on page lang
+  const langMap = { 'Tamil': 'ta-IN', 'Hindi': 'hi-IN', 'English': 'en-US' };
+  const pageLang = '""" + st.session_state.lang + """';
+  recognition.lang = langMap[pageLang] || 'en-US';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    isListening = true;
+    document.getElementById('voiceBtn').classList.add('listening');
+    document.getElementById('voiceBtn').innerHTML = '⏹';
+    document.getElementById('voiceStatus').classList.add('active');
+    document.getElementById('voiceStatus').innerHTML =
+      '<div class="vs-title">🔴 Listening... Speak now</div>' +
+      '<div class="wave-wrap">' +
+      '<div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>' +
+      '<div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>' +
+      '</div>';
+  };
+
+  recognition.onresult = (event) => {
+    let interim = '';
+    finalTranscript = '';
+    for (let i = 0; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript + ' ';
+      } else {
+        interim += event.results[i][0].transcript;
+      }
+    }
+    // Show live transcript
+    const display = finalTranscript + interim;
+    document.getElementById('voiceStatus').innerHTML =
+      '<div class="vs-title">🔴 Listening...</div>' +
+      '<div class="vs-sub" style="color:#334155;font-size:.82rem">' +
+        (display.length > 80 ? '...' + display.slice(-80) : display) +
+      '</div>';
+  };
+
+  recognition.onerror = (e) => {
+    stopListening();
+    document.getElementById('voiceStatus').innerHTML =
+      '<div class="vs-title" style="color:#ef4444">❌ Error: ' + e.error + '</div>' +
+      '<div class="vs-sub">Try again or use Chrome browser</div>';
+  };
+
+  recognition.onend = () => {
+    if (isListening) {
+      // Send transcript to Streamlit via query param trick
+      if (finalTranscript.trim()) {
+        const encoded = encodeURIComponent(finalTranscript.trim());
+        // Store in sessionStorage for Streamlit to pick up
+        sessionStorage.setItem('voiceTranscript', finalTranscript.trim());
+        // Update hidden input to trigger rerun
+        const url = new URL(window.location.href);
+        url.searchParams.set('voice', encoded.substring(0, 200));
+        window.history.replaceState({}, '', url);
+      }
+      stopListening();
+    }
+  };
+
+  recognition.start();
+}
+
+function stopListening() {
+  isListening = false;
+  if (recognition) { try { recognition.stop(); } catch(e){} }
+  document.getElementById('voiceBtn').classList.remove('listening');
+  document.getElementById('voiceBtn').innerHTML = '🎤';
+  document.getElementById('voiceStatus').classList.remove('active');
+
+  const saved = sessionStorage.getItem('voiceTranscript') || '';
+  if (saved) {
+    document.getElementById('voiceStatus').innerHTML =
+      '<div class="vs-title">✅ Voice captured! See text below</div>' +
+      '<div class="vs-sub">' + saved.substring(0, 60) + (saved.length > 60 ? '...' : '') + '</div>';
+  } else {
+    document.getElementById('voiceStatus').innerHTML =
+      '<div class="vs-title">Click mic to speak your answer</div>' +
+      '<div class="vs-sub">Supports English, Tamil, Hindi</div>';
+  }
+}
+</script>
+"""
+    st.components.v1.html(voice_html, height=90)
+
+    # Get voice transcript from query params
+    voice_text = ""
+    try:
+        params = st.query_params
+        if "voice" in params:
+            voice_text = params["voice"]
+            # Clear after reading
+            st.query_params.clear()
+    except:
+        pass
+
+    # Answer textarea — prefill with voice if available
     answer = st.text_area(
         "✍️ Your Answer",
-        placeholder="Type your answer here... Take your time, structure your thoughts clearly.",
+        value=voice_text,
+        placeholder="Speak using mic above OR type your answer here...",
         height=160,
         key=f"answer_{cq}"
     )
+
 
     col1, col2 = st.columns([3, 1])
     with col1:
