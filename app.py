@@ -896,8 +896,8 @@ if st.session_state.stage == "setup":
     st.markdown("""
     <div class="hero-section animate-up">
       <div class="hero-eyebrow">Mock Interview Platform</div>
-      <h1 class="hero-title">Ace your next<br><em>interview</em></h1>
-      <p class="hero-sub">AI-powered mock interviews with real-time feedback. Practice, improve, and land your dream role.</p>
+      <h1 class="hero-title">The opportunity is knocking — are you ready?<br><em>Let's go</em></h1>
+      <p class="hero-sub">Preethi AI-powered mock interviews with real-time feedback. Practice, improve, and land your dream role.</p>
       <div class="hero-stats">
         <div class="hero-stat">
           <div class="hero-stat-val">10+</div>
